@@ -8,12 +8,6 @@ import java.security.Provider;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.util.HexFormat;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
-
-import static java.util.stream.Collectors.joining;
 
 public class TpmProvider extends Provider {
 
@@ -29,15 +23,14 @@ public class TpmProvider extends Provider {
 
         var r = SecureRandom.getInstance("TPM");
         //r.setSeed(new byte[165]);
-        var b = new byte[2048];
-        r.nextBytes(b);
-        System.out.printf("random: %s (java)\n",
-                IntStream.range(0, b.length)
-                        .mapToObj(i -> String.format("%02x", b[i])).collect(joining()));
+        //var b = new byte[2048];
+        //r.nextBytes(b);
+        //System.out.printf("random: %s (java)\n", HexFormat.of().formatHex(b));
 
-        var kpGen = KeyPairGenerator.getInstance("RSA");
+        var kpGen = KeyPairGenerator.getInstance("RSA", p);
         kpGen.initialize(2048);
         var kp = kpGen.generateKeyPair();
         //System.out.printf("%s: %s\n", kp.getPrivate().getClass(), kp.getPrivate());
+
     }
 }

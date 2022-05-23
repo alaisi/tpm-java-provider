@@ -1,5 +1,6 @@
 package com.github.alaisi.tpm.internal;
 
+import java.lang.foreign.MemorySession;
 import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGeneratorSpi;
@@ -18,6 +19,11 @@ public class TpmRsaKeyPairGenerator extends KeyPairGeneratorSpi {
 
     @Override
     public KeyPair generateKeyPair() {
+        try (var allocator = MemorySession.openConfined();
+             var esysCtx = LibTss2.esysInitialize(allocator);
+             var primaryCtx = LibTss2.esysCreatePrimary(allocator, esysCtx)) {
+            System.out.println("Using primary: " + primaryCtx.target());
+        }
         return new KeyPair(
                 new TpmRsaPublicKey(BigInteger.ZERO, BigInteger.ZERO),
                 new TpmRsaPrivateKey(BigInteger.ZERO, BigInteger.ZERO));
