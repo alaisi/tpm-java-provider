@@ -4,6 +4,8 @@ import java.lang.foreign.MemoryLayout;
 import java.lang.invoke.VarHandle;
 
 import static java.lang.foreign.MemoryLayout.*;
+import static java.lang.foreign.MemoryLayout.PathElement.groupElement;
+import static java.lang.foreign.MemoryLayout.PathElement.sequenceElement;
 import static java.lang.foreign.ValueLayout.*;
 
 enum LibTss2Types { ;
@@ -15,11 +17,11 @@ enum LibTss2Types { ;
             sequenceLayout(64, JAVA_BYTE).withName("buffer"));
 
     static final VarHandle TPM2B_DIGEST_size = TPM2B_DIGEST.varHandle(
-            MemoryLayout.PathElement.groupElement("size"));
+            groupElement("size"));
 
     static final VarHandle TPM2B_DIGEST_buffer = TPM2B_DIGEST.varHandle(
-            MemoryLayout.PathElement.groupElement("buffer"),
-            MemoryLayout.PathElement.sequenceElement());
+            groupElement("buffer"),
+            sequenceElement());
 
     // TPM2B_SENSITIVE_DATA
 
@@ -29,11 +31,11 @@ enum LibTss2Types { ;
     );
 
     static final VarHandle TPM2B_SENSITIVE_DATA_size = TPM2B_SENSITIVE_DATA.varHandle(
-            MemoryLayout.PathElement.groupElement("size"));
+            groupElement("size"));
 
     static final VarHandle TPM2B_SENSITIVE_DATA_buffer = TPM2B_SENSITIVE_DATA.varHandle(
-            MemoryLayout.PathElement.groupElement("buffer"),
-            MemoryLayout.PathElement.sequenceElement());
+            groupElement("buffer"),
+            sequenceElement());
 
     // TPM2B_PUBLIC
 
@@ -138,63 +140,102 @@ enum LibTss2Types { ;
             TPMT_PUBLIC.withName("publicArea"),
             paddingLayout(2*8));
 
-    static final VarHandle TPM2B_PUBLIC_publicArea_type = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("type"));
+    static final VarHandle TPM2B_PUBLIC_type = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("type"));
 
     static final VarHandle TPM2B_PUBLIC_publicArea_nameAlg = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("nameAlg"));
+            groupElement("publicArea"),
+            groupElement("nameAlg"));
 
-    static final VarHandle TPM2B_PUBLIC_publicArea_objectAttributes = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("objectAttributes"));
+    static final VarHandle TPM2B_PUBLIC_objectAttributes = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("objectAttributes"));
 
     static final VarHandle TPM2B_PUBLIC_authPolicy_size = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("authPolicy"),
-            PathElement.groupElement("size"));
+            groupElement("publicArea"),
+            groupElement("authPolicy"),
+            groupElement("size"));
 
-    static final VarHandle TPM2B_PUBLIC_parameters_keyBits = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("parameters"),
-            PathElement.groupElement("eccDetail"),
-            PathElement.groupElement("symmetric"),
-            PathElement.groupElement("keyBits"));
+    static final VarHandle TPM2B_PUBLIC_parameters_eccDetail_symmetric_keyBits = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("eccDetail"),
+            groupElement("symmetric"),
+            groupElement("keyBits"));
 
-    static final VarHandle TPM2B_PUBLIC_parameters_algorithm = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("parameters"),
-            PathElement.groupElement("eccDetail"),
-            PathElement.groupElement("symmetric"),
-            PathElement.groupElement("algorithm"));
+    static final VarHandle TPM2B_PUBLIC_parameters_eccDetail_symmetric_algorithm = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("eccDetail"),
+            groupElement("symmetric"),
+            groupElement("algorithm"));
 
-    static final VarHandle TPM2B_PUBLIC_parameters_mode = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("parameters"),
-            PathElement.groupElement("eccDetail"),
-            PathElement.groupElement("symmetric"),
-            PathElement.groupElement("mode"));
+    static final VarHandle TPM2B_PUBLIC_parameters_eccDetail_symmetric_mode = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("eccDetail"),
+            groupElement("symmetric"),
+            groupElement("mode"));
 
-    static final VarHandle TPM2B_PUBLIC_parameters_scheme = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("parameters"),
-            PathElement.groupElement("eccDetail"),
-            PathElement.groupElement("scheme"),
-            PathElement.groupElement("scheme"));
+    static final VarHandle TPM2B_PUBLIC_parameters_eccDetail_scheme_scheme = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("eccDetail"),
+            groupElement("scheme"),
+            groupElement("scheme"));
 
-    static final VarHandle TPM2B_PUBLIC_parameters_curveID = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("parameters"),
-            PathElement.groupElement("eccDetail"),
-            PathElement.groupElement("curveID"));
+    static final VarHandle TPM2B_PUBLIC_parameters_eccDetail_curveID = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("eccDetail"),
+            groupElement("curveID"));
 
-    static final VarHandle TPM2B_PUBLIC_parameters_kdf_scheme = TPM2B_PUBLIC.varHandle(
-            PathElement.groupElement("publicArea"),
-            PathElement.groupElement("parameters"),
-            PathElement.groupElement("eccDetail"),
-            PathElement.groupElement("kdf"),
-            PathElement.groupElement("scheme"));
+    static final VarHandle TPM2B_PUBLIC_parameters_eccDetail_kdf_scheme = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("eccDetail"),
+            groupElement("kdf"),
+            groupElement("scheme"));
+
+    static final VarHandle TPM2B_PUBLIC_parameters_rsaDetail_symmetric_algorithm = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("rsaDetail"),
+            groupElement("symmetric"),
+            groupElement("algorithm"));
+
+    static final VarHandle TPM2B_PUBLIC_parameters_rsaDetail_scheme_scheme = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("rsaDetail"),
+            groupElement("scheme"),
+            groupElement("scheme"));
+
+    static final VarHandle TPM2B_PUBLIC_parameters_rsaDetail_keyBits = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("rsaDetail"),
+            groupElement("keyBits"));
+
+    static final VarHandle TPM2B_PUBLIC_parameters_rsaDetail_exponent = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("parameters"),
+            groupElement("rsaDetail"),
+            groupElement("exponent"));
+
+    static final VarHandle TPM2B_PUBLIC_parameters_rsaDetail_size = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("unique"),
+            groupElement("rsa"),
+            groupElement("size"));
+
+    static final VarHandle TPM2B_PUBLIC_parameters_rsaDetail_buffer = TPM2B_PUBLIC.varHandle(
+            groupElement("publicArea"),
+            groupElement("unique"),
+            groupElement("rsa"),
+            groupElement("buffer"),
+            sequenceElement());
 
     // TPM2B_SENSITIVE_CREATE
 
@@ -217,4 +258,17 @@ enum LibTss2Types { ;
     static final MemoryLayout TPML_PCR_SELECTION = structLayout(
             JAVA_INT.withName("count"),
             sequenceLayout(16, TPMS_PCR_SELECTION).withName("pcrSelections"));
+
+    // TPM2B_PRIVATE
+
+    static final MemoryLayout TPM2B_PRIVATE = structLayout(
+            JAVA_SHORT.withName("size"),
+            sequenceLayout(1550, JAVA_BYTE).withName("buffer"));
+
+    static final VarHandle TPM2B_PRIVATE_size = TPM2B_PUBLIC.varHandle(
+            groupElement("size"));
+
+    static final VarHandle TPM2B_PRIVATE_buffer = TPM2B_DIGEST.varHandle(
+            groupElement("buffer"),
+            sequenceElement());
 }

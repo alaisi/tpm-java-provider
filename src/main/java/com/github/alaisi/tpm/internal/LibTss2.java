@@ -4,6 +4,7 @@ import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -23,11 +24,19 @@ enum LibTss2 { ;
     private static final MethodHandle tss2RcDecode;
     private static final MethodHandle esysCreatePrimary;
     private static final MethodHandle esysFlushContext;
+    private static final MethodHandle esysCreate;
 
     private static final int ESYS_TR_NONE = 0xfff;
     private static final int ESYS_TR_RH_OWNER = 0x101;
     private static final int ESYS_TR_PASSWORD = 0x0ff;
     private static final short TPM2_ALG_ECC = 0x0023;
+    private static final short TPM2_ALG_SHA256 = 0x000b;
+    private static final short TPM2_ALG_AES = 0x0006;
+    private static final short TPM2_ALG_CFB = 0x0043;
+    private static final short TPM2_ALG_NULL = 0x0010;
+    private static final short TPM2_ECC_NIST_P256 = 0x0003;
+
+    static final short TPM2_ALG_RSA = 0x0001;
 
     static {
         var linker = Linker.nativeLinker();
@@ -53,6 +62,11 @@ enum LibTss2 { ;
         esysFlushContext = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_FlushContext").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
+        esysCreate = linker.downcallHandle(
+                libTss2Esys.lookup("Esys_Create").orElseThrow(),
+                FunctionDescriptor.of(
+                        JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
+                        ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
         esysFree = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Free").orElseThrow(),
                 FunctionDescriptor.ofVoid(ADDRESS));
@@ -65,7 +79,7 @@ enum LibTss2 { ;
 
     static Ref<MemoryAddress> esysInitialize(MemorySession allocator) {
         var esysCtxPtr = MemorySegment.allocateNative(ADDRESS, allocator);
-        int rc = (int) invoke(esysInitialize, esysCtxPtr, NULL, NULL);
+        var rc = (int) invoke(esysInitialize, esysCtxPtr, NULL, NULL);
         if (rc != 0) {
             throw new SecurityException("esysInitialize failed: " + tss2RcDecode(rc));
         }
@@ -76,7 +90,7 @@ enum LibTss2 { ;
 
     static byte[] esysGetRandom(MemorySession allocator, Ref<MemoryAddress> esysCtx, int count) {
         var randomPtr = MemorySegment.allocateNative(ADDRESS, allocator);
-        int rc = (int) invoke(esysGetRandom, esysCtx.target(),
+        var rc = (int) invoke(esysGetRandom, esysCtx.target(),
                 ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
                 (short) Math.min(count, 64),
                 randomPtr);
@@ -103,7 +117,7 @@ enum LibTss2 { ;
             }
         }
 
-        int rc = (int) invoke(esysStirRandom, esysCtx.target(), ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, stir);
+        var rc = (int) invoke(esysStirRandom, esysCtx.target(), ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, stir);
         if (rc != 0) {
             throw new SecurityException("esysStirRandom failed: " + tss2RcDecode(rc));
         }
@@ -111,23 +125,22 @@ enum LibTss2 { ;
 
     static Ref<Integer> esysCreatePrimary(MemorySession allocator, Ref<MemoryAddress> esysCtx) {
         var inPublic = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
-        TPM2B_PUBLIC_publicArea_type.set(inPublic, TPM2_ALG_ECC);
-        TPM2B_PUBLIC_publicArea_nameAlg.set(inPublic, (short) 0x000B);
-        TPM2B_PUBLIC_publicArea_objectAttributes.set(inPublic, 0x00030472);
-        TPM2B_PUBLIC_authPolicy_size.set(inPublic, (short) 0);
-        TPM2B_PUBLIC_parameters_algorithm.set(inPublic, (short) 0x0006);
-        TPM2B_PUBLIC_parameters_mode.set(inPublic, (short) 0x0043);
-        TPM2B_PUBLIC_parameters_keyBits.set(inPublic, (short) 128);
-        TPM2B_PUBLIC_parameters_scheme.set(inPublic, (short) 0x0010);
-        TPM2B_PUBLIC_parameters_curveID.set(inPublic, (short) 0x0003);
-        TPM2B_PUBLIC_parameters_kdf_scheme.set(inPublic, (short) 0x0010);
+        TPM2B_PUBLIC_type.set(inPublic, TPM2_ALG_ECC);
+        TPM2B_PUBLIC_publicArea_nameAlg.set(inPublic, TPM2_ALG_SHA256);
+        TPM2B_PUBLIC_objectAttributes.set(inPublic, 0x00030472);
+        TPM2B_PUBLIC_parameters_eccDetail_symmetric_algorithm.set(inPublic, TPM2_ALG_AES);
+        TPM2B_PUBLIC_parameters_eccDetail_symmetric_mode.set(inPublic, TPM2_ALG_CFB);
+        TPM2B_PUBLIC_parameters_eccDetail_symmetric_keyBits.set(inPublic, (short) 128);
+        TPM2B_PUBLIC_parameters_eccDetail_scheme_scheme.set(inPublic, TPM2_ALG_NULL);
+        TPM2B_PUBLIC_parameters_eccDetail_curveID.set(inPublic, TPM2_ECC_NIST_P256);
+        TPM2B_PUBLIC_parameters_eccDetail_kdf_scheme.set(inPublic, TPM2_ALG_NULL);
 
         var inSensitive = MemorySegment.allocateNative(TPM2B_SENSITIVE_CREATE, allocator);
         var outsideInfo = MemorySegment.allocateNative(TPM2B_DIGEST, allocator);
         var creationPCR = MemorySegment.allocateNative(TPML_PCR_SELECTION, allocator);
 
         var objectHandle = allocator.allocate(JAVA_INT, 0);
-        int rc = (int) invoke(
+        var rc = (int) invoke(
                 esysCreatePrimary, esysCtx.target(), ESYS_TR_RH_OWNER,
                 ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
                 inSensitive, inPublic, outsideInfo, creationPCR, objectHandle,
@@ -137,6 +150,57 @@ enum LibTss2 { ;
         }
         var primary = objectHandle.get(JAVA_INT, 0);
         return new Ref<>(primary, () -> esysFlushContext(esysCtx, primary));
+    }
+
+    static Ref<LibTss2KeyPair> esysCreate(MemorySession allocator,
+                                          Ref<MemoryAddress> esysCtx,
+                                          int primaryCtx,
+                                          short algorithm,
+                                          short keyBits) {
+        var inPublic = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
+        TPM2B_PUBLIC_type.set(inPublic, algorithm);
+        TPM2B_PUBLIC_publicArea_nameAlg.set(inPublic, TPM2_ALG_SHA256);
+        TPM2B_PUBLIC_objectAttributes.set(inPublic, 0x060472);
+        TPM2B_PUBLIC_parameters_rsaDetail_symmetric_algorithm.set(inPublic, TPM2_ALG_NULL);
+        TPM2B_PUBLIC_parameters_rsaDetail_scheme_scheme.set(inPublic, TPM2_ALG_NULL);
+        TPM2B_PUBLIC_parameters_rsaDetail_keyBits.set(inPublic, keyBits);
+
+        var inSensitive = MemorySegment.allocateNative(TPM2B_SENSITIVE_CREATE, allocator);
+        var outsideInfo = MemorySegment.allocateNative(TPM2B_DIGEST, allocator);
+        var creationPCR = MemorySegment.allocateNative(TPML_PCR_SELECTION, allocator);
+
+        var keyPrivatePtr = MemorySegment.allocateNative(ADDRESS, allocator);
+        var keyPublicPtr = MemorySegment.allocateNative(ADDRESS, allocator);
+        var rc = (int) invoke(
+                esysCreate, esysCtx.target(), primaryCtx,
+                ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+                inSensitive, inPublic, outsideInfo, creationPCR,
+                keyPrivatePtr, keyPublicPtr, NULL, NULL, NULL);
+        if (rc != 0) {
+            throw new SecurityException("esysCreatePrimary failed: " + tss2RcDecode(rc));
+        }
+        var keyPrivate = cast(keyPrivatePtr.get(ADDRESS, 0), TPM2B_PRIVATE, allocator);
+        var keyPublic = cast(keyPublicPtr.get(ADDRESS, 0), TPM2B_PUBLIC, allocator);
+        var exponent = (int) TPM2B_PUBLIC_parameters_rsaDetail_exponent.get(keyPublic);
+        var modulusBuffer = new byte[(int) TPM2B_PUBLIC_parameters_rsaDetail_size.get(keyPublic)];
+        for (var i = 0; i < modulusBuffer.length; i++) {
+            modulusBuffer[i] = (byte) TPM2B_PUBLIC_parameters_rsaDetail_buffer.get(keyPublic, i);
+        }
+        var privateBuffer = new byte[(int) TPM2B_PRIVATE_size.get(keyPrivate)];
+        for (var i = 0; i < privateBuffer.length; i++) {
+            privateBuffer[i] = (byte) TPM2B_PRIVATE_buffer.get(keyPrivate, i);
+        }
+        return new Ref<>(
+                new LibTss2KeyPair(
+                        keyPrivate,
+                        keyPublic,
+                        BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
+                        new BigInteger(1, modulusBuffer),
+                        privateBuffer),
+                () -> {
+                    esysFree(keyPrivatePtr.get(ADDRESS, 0));
+                    esysFree(keyPublicPtr.get(ADDRESS, 0));
+                });
     }
 
     static void esysFlushContext(Ref<MemoryAddress> esysCtx, int flushHandle) {
@@ -177,6 +241,11 @@ enum LibTss2 { ;
             destructor.run();
         }
     }
+    record LibTss2KeyPair(MemorySegment keyPrivate,
+                          MemorySegment keyPublic,
+                          BigInteger publicExponent,
+                          BigInteger modulus,
+                          byte[] privateBuffer) {}
 
     public static void main(String[] args) throws Exception {
         var l = new ArrayList<String>();
@@ -195,16 +264,15 @@ enum LibTss2 { ;
 
         try (MemorySession allocator = MemorySession.openConfined()) {
             var pub = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
-            TPM2B_PUBLIC_publicArea_type.set(pub, (short) 0x0023);
-            TPM2B_PUBLIC_publicArea_nameAlg.set(pub, (short) 0x000B);
-            TPM2B_PUBLIC_publicArea_objectAttributes.set(pub, 0x00030472);
-            TPM2B_PUBLIC_authPolicy_size.set(pub, (short) 0);
-            TPM2B_PUBLIC_parameters_algorithm.set(pub, (short) 0x0006);
-            TPM2B_PUBLIC_parameters_mode.set(pub, (short) 0x0043);
-            TPM2B_PUBLIC_parameters_keyBits.set(pub, (short) 128);
-            TPM2B_PUBLIC_parameters_scheme.set(pub, (short) 0x0010);
-            TPM2B_PUBLIC_parameters_curveID.set(pub, (short) 0x0003);
-            TPM2B_PUBLIC_parameters_kdf_scheme.set(pub, (short) 0x0010);
+            TPM2B_PUBLIC_type.set(pub, TPM2_ALG_ECC);
+            TPM2B_PUBLIC_publicArea_nameAlg.set(pub, TPM2_ALG_SHA256);
+            TPM2B_PUBLIC_objectAttributes.set(pub, 0x00030472);
+            TPM2B_PUBLIC_parameters_eccDetail_symmetric_algorithm.set(pub, TPM2_ALG_AES);
+            TPM2B_PUBLIC_parameters_eccDetail_symmetric_mode.set(pub, TPM2_ALG_CFB);
+            TPM2B_PUBLIC_parameters_eccDetail_symmetric_keyBits.set(pub, (short) 128);
+            TPM2B_PUBLIC_parameters_eccDetail_scheme_scheme.set(pub, TPM2_ALG_NULL);
+            TPM2B_PUBLIC_parameters_eccDetail_curveID.set(pub, TPM2_ECC_NIST_P256);
+            TPM2B_PUBLIC_parameters_eccDetail_kdf_scheme.set(pub, TPM2_ALG_NULL);
 
             var bb = pub.asByteBuffer();
             var bytes = new byte[bb.remaining()];
