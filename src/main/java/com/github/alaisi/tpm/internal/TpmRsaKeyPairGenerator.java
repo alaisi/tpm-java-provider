@@ -1,17 +1,14 @@
 package com.github.alaisi.tpm.internal;
 
+import java.lang.foreign.MemorySegment;
 import java.lang.foreign.MemorySession;
 import java.math.BigInteger;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyPair;
 import java.security.KeyPairGeneratorSpi;
 import java.security.SecureRandom;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.security.spec.AlgorithmParameterSpec;
 import java.util.HexFormat;
-
-import static com.github.alaisi.tpm.internal.LibTss2.TPM2_ALG_RSA;
 
 public class TpmRsaKeyPairGenerator extends KeyPairGeneratorSpi {
 
@@ -27,15 +24,14 @@ public class TpmRsaKeyPairGenerator extends KeyPairGeneratorSpi {
         try (var allocator = MemorySession.openConfined();
              var esysCtx = LibTss2.esysInitialize(allocator);
              var primaryCtx = LibTss2.esysCreatePrimary(allocator, esysCtx);
-             var keys = LibTss2.esysCreate(
-                     allocator, esysCtx, primaryCtx.target(), TPM2_ALG_RSA, keySize)) {
+             var keys = LibTss2.esysCreateRsa(allocator, esysCtx, primaryCtx.target(), keySize)) {
             return new KeyPair(
                     new TpmRsaPublicKey(keys.target().modulus(), keys.target().publicExponent()),
-                    new TpmRsaPrivateKey(keys.target().modulus(), keys.target().publicExponent(), keys.target().privateBuffer()));
+                    new TpmRsaPrivateKey(keys.target().modulus(), keys.target().privateBuffer()));
         }
     }
 
-    static class TpmRsaPublicKey extends TpmKey implements RSAPublicKey {
+    static final class TpmRsaPublicKey extends TpmKey implements RSAPublicKey {
 
         private final BigInteger modulus;
         private final BigInteger publicExponent;
@@ -62,17 +58,28 @@ public class TpmRsaKeyPairGenerator extends KeyPairGeneratorSpi {
 
         @Override
         public String toString() {
-            return String.format("TpmRsaPublicKey(modulus=%s, publicExponent=%s)", modulus, publicExponent);
+            return String.format("TpmRsaPublicKey(publicExponent=%s, modulus=%s)", publicExponent, modulus);
         }
     }
 
-    static class TpmRsaPrivateKey extends TpmRsaPublicKey implements RSAPrivateKey {
+    static final class TpmRsaPrivateKey extends TpmKey implements RSAPrivateKey {
 
-        private final byte[] tpmHandle;
+        private final BigInteger modulus;
+        private final byte[] privateBuffer;
 
-        TpmRsaPrivateKey(BigInteger modulus, BigInteger publicExponent, byte[] tpmHandle) {
-            super(modulus, publicExponent);
-            this.tpmHandle = tpmHandle;
+        TpmRsaPrivateKey(BigInteger modulus, byte[] privateBuffer) {
+            this.modulus = modulus;
+            this.privateBuffer = privateBuffer;
+        }
+
+        @Override
+        public String getAlgorithm() {
+            return "RSA";
+        }
+
+        @Override
+        public BigInteger getModulus() {
+            return modulus;
         }
 
         @Override
@@ -82,7 +89,7 @@ public class TpmRsaKeyPairGenerator extends KeyPairGeneratorSpi {
 
         @Override
         public String toString() {
-            return String.format("TpmRsaPrivateKey(tpmHandle=%s)", HexFormat.of().formatHex(tpmHandle));
+            return String.format("TpmRsaPrivateKey(privateBuffer=%s)", HexFormat.of().formatHex(privateBuffer));
         }
     }
 }

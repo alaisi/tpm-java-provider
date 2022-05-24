@@ -3,11 +3,8 @@ package com.github.alaisi.tpm;
 import com.github.alaisi.tpm.internal.TpmRsaKeyPairGenerator;
 import com.github.alaisi.tpm.internal.TpmSecureRandom;
 
-import java.math.BigInteger;
 import java.security.*;
 import java.security.interfaces.RSAPublicKey;
-import java.security.spec.RSAKeyGenParameterSpec;
-import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 
 public class TpmProvider extends Provider {
@@ -31,7 +28,7 @@ public class TpmProvider extends Provider {
         var kpGen = KeyPairGenerator.getInstance("RSA", p);
         kpGen.initialize(2048);
         var kp = kpGen.generateKeyPair();
-        System.out.printf("%s: %s\n", kp.getPublic(), kp.getPrivate());
+        System.out.printf("pub=%s\npriv=%s\n", kp.getPublic(), kp.getPrivate());
         var pub = (RSAPublicKey) kp.getPublic();
 
         var kf = KeyFactory.getInstance("RSA");

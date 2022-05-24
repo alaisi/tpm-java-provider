@@ -35,8 +35,7 @@ enum LibTss2 { ;
     private static final short TPM2_ALG_CFB = 0x0043;
     private static final short TPM2_ALG_NULL = 0x0010;
     private static final short TPM2_ECC_NIST_P256 = 0x0003;
-
-    static final short TPM2_ALG_RSA = 0x0001;
+    private static final short TPM2_ALG_RSA = 0x0001;
 
     static {
         var linker = Linker.nativeLinker();
@@ -152,13 +151,12 @@ enum LibTss2 { ;
         return new Ref<>(primary, () -> esysFlushContext(esysCtx, primary));
     }
 
-    static Ref<LibTss2KeyPair> esysCreate(MemorySession allocator,
-                                          Ref<MemoryAddress> esysCtx,
-                                          int primaryCtx,
-                                          short algorithm,
-                                          short keyBits) {
+    static Ref<RsaKeys> esysCreateRsa(MemorySession allocator,
+                                      Ref<MemoryAddress> esysCtx,
+                                      int primaryCtx,
+                                      short keyBits) {
         var inPublic = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
-        TPM2B_PUBLIC_type.set(inPublic, algorithm);
+        TPM2B_PUBLIC_type.set(inPublic, TPM2_ALG_RSA);
         TPM2B_PUBLIC_publicArea_nameAlg.set(inPublic, TPM2_ALG_SHA256);
         TPM2B_PUBLIC_objectAttributes.set(inPublic, 0x060472);
         TPM2B_PUBLIC_parameters_rsaDetail_symmetric_algorithm.set(inPublic, TPM2_ALG_NULL);
@@ -191,9 +189,7 @@ enum LibTss2 { ;
             privateBuffer[i] = (byte) TPM2B_PRIVATE_buffer.get(keyPrivate, i);
         }
         return new Ref<>(
-                new LibTss2KeyPair(
-                        keyPrivate,
-                        keyPublic,
+                new RsaKeys(
                         BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
                         new BigInteger(1, modulusBuffer),
                         privateBuffer),
@@ -204,7 +200,7 @@ enum LibTss2 { ;
     }
 
     static void esysFlushContext(Ref<MemoryAddress> esysCtx, int flushHandle) {
-        int rc = (int) invoke(esysFlushContext, esysCtx.target(), flushHandle);
+        var rc = (int) invoke(esysFlushContext, esysCtx.target(), flushHandle);
         if (rc != 0) {
             throw new SecurityException("esysFlushContext failed: " + tss2RcDecode(rc));
         }
@@ -241,11 +237,7 @@ enum LibTss2 { ;
             destructor.run();
         }
     }
-    record LibTss2KeyPair(MemorySegment keyPrivate,
-                          MemorySegment keyPublic,
-                          BigInteger publicExponent,
-                          BigInteger modulus,
-                          byte[] privateBuffer) {}
+    record RsaKeys(BigInteger publicExponent, BigInteger modulus, byte[] privateBuffer) {}
 
     public static void main(String[] args) throws Exception {
         var l = new ArrayList<String>();
