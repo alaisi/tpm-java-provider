@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
  
   <groupId>com.github.alaisi</groupId>
-  <artifactId>tpm-jca-provider</artifactId>
+  <artifactId>tpm-java-provider</artifactId>
   <version>0.0.1-SNAPSHOT</version>
 
   <properties>
