@@ -23,11 +23,11 @@ public class TpmRsaKeyPairGenerator extends KeyPairGeneratorSpi {
     public KeyPair generateKeyPair() {
         try (var allocator = MemorySession.openConfined();
              var esysCtx = LibTss2.esysInitialize(allocator);
-             var primaryCtx = LibTss2.esysCreatePrimary(allocator, esysCtx);
-             var keys = LibTss2.esysCreateRsa(allocator, esysCtx, primaryCtx.target(), keySize)) {
+             var primaryCtx = LibTss2.esysCreatePrimary(allocator, esysCtx)) {
+            var keys = LibTss2.esysCreateRsa(allocator, esysCtx, primaryCtx.target(), keySize);
             return new KeyPair(
-                    new TpmRsaPublicKey(keys.target().modulus(), keys.target().publicExponent()),
-                    new TpmRsaPrivateKey(keys.target().modulus(), keys.target().privateBuffer()));
+                    new TpmRsaPublicKey(keys.modulus(), keys.publicExponent()),
+                    new TpmRsaPrivateKey(keys.modulus(), keys.privateBuffer()));
         }
     }
 

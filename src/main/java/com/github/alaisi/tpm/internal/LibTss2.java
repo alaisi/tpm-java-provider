@@ -2,6 +2,7 @@ package com.github.alaisi.tpm.internal;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.math.BigInteger;
@@ -151,10 +152,10 @@ enum LibTss2 { ;
         return new Ref<>(primary, () -> esysFlushContext(esysCtx, primary));
     }
 
-    static Ref<RsaKeys> esysCreateRsa(MemorySession allocator,
-                                      Ref<MemoryAddress> esysCtx,
-                                      int primaryCtx,
-                                      short keyBits) {
+    static Tss2RsaKey esysCreateRsa(MemorySession allocator,
+                                    Ref<MemoryAddress> esysCtx,
+                                    int primaryCtx,
+                                    short keyBits) {
         var inPublic = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
         TPM2B_PUBLIC_type.set(inPublic, TPM2_ALG_RSA);
         TPM2B_PUBLIC_publicArea_nameAlg.set(inPublic, TPM2_ALG_SHA256);
@@ -177,26 +178,23 @@ enum LibTss2 { ;
         if (rc != 0) {
             throw new SecurityException("esysCreatePrimary failed: " + tss2RcDecode(rc));
         }
-        var keyPrivate = cast(keyPrivatePtr.get(ADDRESS, 0), TPM2B_PRIVATE, allocator);
-        var keyPublic = cast(keyPublicPtr.get(ADDRESS, 0), TPM2B_PUBLIC, allocator);
-        var exponent = (int) TPM2B_PUBLIC_parameters_rsaDetail_exponent.get(keyPublic);
-        var modulusBuffer = new byte[(int) TPM2B_PUBLIC_parameters_rsaDetail_size.get(keyPublic)];
-        for (var i = 0; i < modulusBuffer.length; i++) {
-            modulusBuffer[i] = (byte) TPM2B_PUBLIC_parameters_rsaDetail_buffer.get(keyPublic, i);
+        try (var privateRef = asRef(keyPrivatePtr.get(ADDRESS, 0));
+             var publicRef = asRef(keyPublicPtr.get(ADDRESS, 0))) {
+            var keyPublic = cast(publicRef.target(), TPM2B_PUBLIC, allocator);
+            var exponent = (int) TPM2B_PUBLIC_parameters_rsaDetail_exponent.get(keyPublic);
+            var modulus = copyBytes(
+                    TPM2B_PUBLIC_parameters_rsaDetail_size,
+                    TPM2B_PUBLIC_parameters_rsaDetail_buffer,
+                    keyPublic);
+            var privateBuffer = copyBytes(
+                    TPM2B_PRIVATE_size,
+                    TPM2B_PRIVATE_buffer,
+                    cast(privateRef.target(), TPM2B_PRIVATE, allocator));
+            return new Tss2RsaKey(
+                    BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
+                    new BigInteger(1, modulus),
+                    privateBuffer);
         }
-        var privateBuffer = new byte[(int) TPM2B_PRIVATE_size.get(keyPrivate)];
-        for (var i = 0; i < privateBuffer.length; i++) {
-            privateBuffer[i] = (byte) TPM2B_PRIVATE_buffer.get(keyPrivate, i);
-        }
-        return new Ref<>(
-                new RsaKeys(
-                        BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
-                        new BigInteger(1, modulusBuffer),
-                        privateBuffer),
-                () -> {
-                    esysFree(keyPrivatePtr.get(ADDRESS, 0));
-                    esysFree(keyPublicPtr.get(ADDRESS, 0));
-                });
     }
 
     static void esysFlushContext(Ref<MemoryAddress> esysCtx, int flushHandle) {
@@ -223,6 +221,14 @@ enum LibTss2 { ;
         }
     }
 
+    private static byte[] copyBytes(VarHandle sizeHandle, VarHandle bufHandle, MemorySegment struct) {
+        var bytes = new byte[(int) sizeHandle.get(struct)];
+        for (var i = 0; i < bytes.length; i++) {
+            bytes[i] = (byte) bufHandle.get(struct, i);
+        }
+        return bytes;
+    }
+
     private static Ref<MemoryAddress> asRef(MemoryAddress ptr) {
         return new Ref<>(ptr, () -> esysFree(ptr));
     }
@@ -237,7 +243,7 @@ enum LibTss2 { ;
             destructor.run();
         }
     }
-    record RsaKeys(BigInteger publicExponent, BigInteger modulus, byte[] privateBuffer) {}
+    record Tss2RsaKey(BigInteger publicExponent, BigInteger modulus, byte[] privateBuffer) {}
 
     public static void main(String[] args) throws Exception {
         var l = new ArrayList<String>();
