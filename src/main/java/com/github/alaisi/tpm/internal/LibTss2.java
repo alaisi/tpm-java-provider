@@ -26,6 +26,7 @@ enum LibTss2 { ;
     private static final MethodHandle esysCreatePrimary;
     private static final MethodHandle esysFlushContext;
     private static final MethodHandle esysCreate;
+    private static final MethodHandle esysLoad;
 
     private static final int ESYS_TR_NONE = 0xfff;
     private static final int ESYS_TR_RH_OWNER = 0x101;
@@ -41,7 +42,7 @@ enum LibTss2 { ;
     static {
         var linker = Linker.nativeLinker();
 
-        var libTss2Esys = SymbolLookup.libraryLookup("libtss2-esys.so", openImplicit());
+        var libTss2Esys = SymbolLookup.libraryLookup("libtss2-esys.so.0", openImplicit());
         esysInitialize = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Initialize").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
@@ -67,11 +68,16 @@ enum LibTss2 { ;
                 FunctionDescriptor.of(
                         JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
                         ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
+        esysLoad = linker.downcallHandle(
+                libTss2Esys.lookup("Esys_Load").orElseThrow(),
+                FunctionDescriptor.of(
+                        JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
+                        ADDRESS, ADDRESS, ADDRESS));
         esysFree = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Free").orElseThrow(),
                 FunctionDescriptor.ofVoid(ADDRESS));
 
-        var libTss2Rc = SymbolLookup.libraryLookup("libtss2-rc.so", openImplicit());
+        var libTss2Rc = SymbolLookup.libraryLookup("libtss2-rc.so.0", openImplicit());
         tss2RcDecode = linker.downcallHandle(
                 libTss2Rc.lookup("Tss2_RC_Decode").orElseThrow(),
                 FunctionDescriptor.of(ADDRESS, JAVA_INT));
@@ -115,11 +121,10 @@ enum LibTss2 { ;
             for (int k = 0; k < j - i; k++) {
                 TPM2B_SENSITIVE_DATA_buffer.set(stir, k, seed[i + k]);
             }
-        }
-
-        var rc = (int) invoke(esysStirRandom, esysCtx.target(), ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, stir);
-        if (rc != 0) {
-            throw new SecurityException("esysStirRandom failed: " + tss2RcDecode(rc));
+            var rc = (int) invoke(esysStirRandom, esysCtx.target(), ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, stir);
+            if (rc != 0) {
+                throw new SecurityException("esysStirRandom failed: " + tss2RcDecode(rc));
+            }
         }
     }
 
@@ -190,11 +195,34 @@ enum LibTss2 { ;
                     TPM2B_PRIVATE_size,
                     TPM2B_PRIVATE_buffer,
                     cast(privateRef.target(), TPM2B_PRIVATE, allocator));
+            try (var loaded = esysLoad(
+                    allocator, esysCtx, primaryCtx,
+                    privateRef.target(), publicRef.target())) {
+                System.out.println("Loaded handle " + loaded.target());
+            }
             return new Tss2RsaKey(
                     BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
                     new BigInteger(1, modulus),
                     privateBuffer);
         }
+    }
+
+    static Ref<Integer> esysLoad(MemorySession allocator,
+                                 Ref<MemoryAddress> esysCtx,
+                                 int primaryCtx,
+                                 MemoryAddress inPrivate,
+                                 MemoryAddress inPublic) {
+        var handlePtr = MemorySegment.allocateNative(ADDRESS, allocator);
+        var rc = (int) invoke(
+                esysLoad,
+                esysCtx.target(), primaryCtx,
+                ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+                inPrivate,  inPublic, handlePtr);
+        if (rc != 0) {
+            throw new SecurityException("esysLoad failed: " + tss2RcDecode(rc));
+        }
+        var handle = handlePtr.get(JAVA_INT, 0);
+        return new Ref<>(handle, () -> esysFlushContext(esysCtx, handle));
     }
 
     static void esysFlushContext(Ref<MemoryAddress> esysCtx, int flushHandle) {
