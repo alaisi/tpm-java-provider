@@ -3,12 +3,7 @@ package com.github.alaisi.tpm.internal;
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HexFormat;
 
 import static com.github.alaisi.tpm.internal.LibTss2Types.*;
 import static java.lang.foreign.MemoryAddress.NULL;
@@ -220,28 +215,6 @@ enum LibTss2 { ;
                     keyPublic);
             var marshalledPrivate = tss2PrivateMarshall(allocator, privateRef.target());
             var marshalledPublic = tss2PublicMarshall(allocator, publicRef.target());
-            /*
-            var unmarshalledPrivate = tss2PrivateUnmarshall(allocator, marshalledPrivate);
-            var unmarshalledPublic = tss2PublicUnmarshall(allocator, marshalledPublic);
-            try (var loaded = esysLoad(
-                    allocator, esysCtx, primaryCtx,
-                    privateRef.target(), publicRef.target())) {
-                System.out.println("Loaded handle " + loaded.target());
-                esysSign(allocator, esysCtx, loaded.target(), new byte[32]);
-
-                var privateBuffer2 = readBytes(
-                        TPM2B_PRIVATE_size,
-                        TPM2B_PRIVATE_buffer,
-                        cast(unmarshalledPrivate, TPM2B_PRIVATE, allocator));
-                System.out.println("privateBuffer=" + HexFormat.of().formatHex(privateBuffer2));
-                var modulus2 = readBytes(
-                        TPM2B_PUBLIC_parameters_rsaDetail_size,
-                        TPM2B_PUBLIC_parameters_rsaDetail_buffer,
-                        cast(unmarshalledPublic, TPM2B_PUBLIC, allocator));
-                System.out.println("modulus=" + new BigInteger(1, modulus2));
-            }
-            */
-
             return new Tss2RsaKey(
                     BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
                     new BigInteger(1, modulus),
@@ -416,39 +389,4 @@ enum LibTss2 { ;
                       byte[] marshalledPrivate,
                       byte[] marshalledPublic) {}
 
-    public static void main(String[] args) throws Exception {
-        var l = new ArrayList<String>();
-        for (Field f : LibTss2.class.getDeclaredFields()) {
-            if ((f.getModifiers() & Modifier.STATIC) != 0 && f.getType().equals(MemoryLayout.class)) {
-                f.setAccessible(true);
-                MemoryLayout m = (MemoryLayout) f.get(null);
-                l.add(f.getName() + ": " + m.byteSize());
-                //l.add("printf(\"" + f.getName() + ": %lu\\n\", sizeof(" + f.getName() + "));");
-            }
-        }
-        Collections.sort(l);
-        for (String s : l) {
-            System.out.println(s);
-        }
-
-        try (MemorySession allocator = MemorySession.openConfined()) {
-            var pub = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
-            TPM2B_PUBLIC_type.set(pub, TPM2_ALG_ECC);
-            TPM2B_PUBLIC_publicArea_nameAlg.set(pub, TPM2_ALG_SHA256);
-            TPM2B_PUBLIC_objectAttributes.set(pub, 0x00030472);
-            TPM2B_PUBLIC_parameters_eccDetail_symmetric_algorithm.set(pub, TPM2_ALG_AES);
-            TPM2B_PUBLIC_parameters_eccDetail_symmetric_mode.set(pub, TPM2_ALG_CFB);
-            TPM2B_PUBLIC_parameters_eccDetail_symmetric_keyBits.set(pub, (short) 128);
-            TPM2B_PUBLIC_parameters_eccDetail_scheme_scheme.set(pub, TPM2_ALG_NULL);
-            TPM2B_PUBLIC_parameters_eccDetail_curveID.set(pub, TPM2_ECC_NIST_P256);
-            TPM2B_PUBLIC_parameters_eccDetail_kdf_scheme.set(pub, TPM2_ALG_NULL);
-
-            var bb = pub.asByteBuffer();
-            var bytes = new byte[bb.remaining()];
-            bb.get(bytes);
-            System.out.println(HexFormat.of().formatHex(bytes));
-            System.out.println("0000000023000b007204030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000600800043001000000000000300100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
-        }
-
-    }
 }

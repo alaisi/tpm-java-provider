@@ -5,7 +5,6 @@ import com.github.alaisi.tpm.internal.TpmKey.TpmRsaPrivateKey;
 import java.lang.foreign.MemorySession;
 import java.security.*;
 import java.security.spec.AlgorithmParameterSpec;
-import java.util.HexFormat;
 
 public final class TpmSignature extends SignatureSpi {
 
@@ -43,9 +42,7 @@ public final class TpmSignature extends SignatureSpi {
             try (var esysCtx = LibTss2.esysInitialize(allocator);
                  var primaryCtx = LibTss2.esysCreatePrimary(allocator, esysCtx);
                  var keyCtx = LibTss2.esysLoad(allocator, esysCtx, primaryCtx.target(), priv, pub)) {
-                var signature = LibTss2.esysSign(allocator, esysCtx, keyCtx.target(), digest.digest());
-                System.out.println("sig = " + HexFormat.of().formatHex(signature));
-                return signature;
+                return LibTss2.esysSign(allocator, esysCtx, keyCtx.target(), digest.digest());
              }
         }
     }
