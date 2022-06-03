@@ -3,9 +3,9 @@ package com.github.alaisi.tpm.internal;
 import java.lang.foreign.MemoryLayout;
 import java.lang.invoke.VarHandle;
 
-import static java.lang.foreign.MemoryLayout.*;
 import static java.lang.foreign.MemoryLayout.PathElement.groupElement;
 import static java.lang.foreign.MemoryLayout.PathElement.sequenceElement;
+import static java.lang.foreign.MemoryLayout.*;
 import static java.lang.foreign.ValueLayout.*;
 
 enum LibTss2Types { ;
@@ -269,6 +269,67 @@ enum LibTss2Types { ;
             groupElement("size"));
 
     static final VarHandle TPM2B_PRIVATE_buffer = TPM2B_DIGEST.varHandle(
+            groupElement("buffer"),
+            sequenceElement());
+
+    // TPMT_SIG_SCHEME
+
+    static final MemoryLayout TPMU_SIG_SCHEME = unionLayout(
+            TPMS_SCHEME_HASH.withName("rsassa"));
+
+    static final MemoryLayout TPMT_SIG_SCHEME = structLayout(
+            JAVA_SHORT.withName("scheme"),
+            TPMU_SIG_SCHEME.withName("details"));
+
+    static final VarHandle TPMT_SIG_SCHEME_scheme = TPMT_SIG_SCHEME.varHandle(
+            groupElement("scheme"));
+
+    static final VarHandle TPMT_SIG_SCHEME_details_rsassa_hashAlg = TPMT_SIG_SCHEME.varHandle(
+            groupElement("details"),
+            groupElement("rsassa"),
+            groupElement("hashAlg"));
+
+    // TPMT_TK_HASHCHECK
+
+    static final MemoryLayout TPMT_TK_HASHCHECK = structLayout(
+            JAVA_SHORT.withName("tag"),
+            paddingLayout(2*8),
+            JAVA_INT.withName("hierarchy"),
+            TPM2B_DIGEST.withName("digest"));
+
+    static final VarHandle TPMT_TK_HASHCHECK_tag = TPMT_TK_HASHCHECK.varHandle(
+            groupElement("tag"));
+
+    static final VarHandle TPMT_TK_HASHCHECK_hierarchy = TPMT_TK_HASHCHECK.varHandle(
+            groupElement("hierarchy"));
+
+    static final VarHandle TPMT_TK_HASHCHECK_digest_size = TPMT_TK_HASHCHECK.varHandle(
+            groupElement("digest"),
+            groupElement("size"));
+
+    // TPMT_SIGNATURE
+
+    static final MemoryLayout TPMS_SIGNATURE_RSA = structLayout(
+            JAVA_SHORT.withName("hash"),
+            TPM2B_PUBLIC_KEY_RSA.withName("sig"));
+
+    static final MemoryLayout TPMU_SIGNATURE = unionLayout(
+            TPMS_SIGNATURE_RSA.withName("rsassa"));
+
+    static final MemoryLayout TPMT_SIGNATURE = structLayout(
+            JAVA_SHORT.withName("scheme"),
+            TPMU_SIGNATURE.withName("signature"));
+
+    static final VarHandle TPMT_SIGNATURE_signature_rsassa_sig_size = TPMT_SIGNATURE.varHandle(
+            groupElement("signature"),
+            groupElement("rsassa"),
+            groupElement("sig"),
+            groupElement("size"));
+
+    static final VarHandle TPMT_SIGNATURE_signature_rsassa_sig_buffer = TPMT_SIGNATURE.varHandle(
+            groupElement("signature"),
+            groupElement("rsassa"),
+            groupElement("sig"),
             groupElement("buffer"),
             sequenceElement());
 }

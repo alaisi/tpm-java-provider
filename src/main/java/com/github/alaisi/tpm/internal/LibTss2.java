@@ -16,16 +16,17 @@ import static java.lang.foreign.ValueLayout.*;
 
 enum LibTss2 { ;
 
-    private static final MethodHandle esysInitialize;
-    private static final MethodHandle esysFinalize;
-    private static final MethodHandle esysGetRandom;
-    private static final MethodHandle esysStirRandom;
-    private static final MethodHandle esysFree;
-    private static final MethodHandle tss2RcDecode;
-    private static final MethodHandle esysCreatePrimary;
-    private static final MethodHandle esysFlushContext;
-    private static final MethodHandle esysCreate;
-    private static final MethodHandle esysLoad;
+    private static final MethodHandle Esys_Initialize;
+    private static final MethodHandle Esys_Finalize;
+    private static final MethodHandle Esys_GetRandom;
+    private static final MethodHandle Esys_StirRandom;
+    private static final MethodHandle Esys_Free;
+    private static final MethodHandle Tss2_RC_Decode;
+    private static final MethodHandle Esys_CreatePrimary;
+    private static final MethodHandle Esys_FlushContext;
+    private static final MethodHandle Esys_Create;
+    private static final MethodHandle Esys_Load;
+    private static final MethodHandle Esys_Sign;
     private static final MethodHandle Tss2_MU_TPM2B_PRIVATE_Marshal;
     private static final MethodHandle Tss2_MU_TPM2B_PRIVATE_Unmarshal;
     private static final MethodHandle Tss2_MU_TPM2B_PUBLIC_Marshal;
@@ -41,48 +42,56 @@ enum LibTss2 { ;
     private static final short TPM2_ALG_NULL = 0x0010;
     private static final short TPM2_ECC_NIST_P256 = 0x0003;
     private static final short TPM2_ALG_RSA = 0x0001;
+    private static final short TPM2_ALG_RSASSA = 0x0014;
+    private static final short TPM2_ST_HASHCHECK = (short) 0x8024;
+    private static final int TPM2_RH_NULL = 0x40000007;
 
     static {
         var linker = Linker.nativeLinker();
         var allocator = MemorySession.openImplicit();
 
         var libTss2Esys = SymbolLookup.libraryLookup("libtss2-esys.so.0", allocator);
-        esysInitialize = linker.downcallHandle(
+        Esys_Initialize = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Initialize").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
-        esysFinalize = linker.downcallHandle(
+        Esys_Finalize = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Finalize").orElseThrow(),
                 FunctionDescriptor.ofVoid(ADDRESS));
-        esysGetRandom = linker.downcallHandle(
+        Esys_GetRandom = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_GetRandom").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_SHORT, ADDRESS));
-        esysStirRandom = linker.downcallHandle(
+        Esys_StirRandom = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_StirRandom").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS));
-        esysCreatePrimary = linker.downcallHandle(
+        Esys_CreatePrimary = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_CreatePrimary").orElseThrow(),
                 FunctionDescriptor.of(
                         JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
                         ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
-        esysFlushContext = linker.downcallHandle(
+        Esys_FlushContext = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_FlushContext").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
-        esysCreate = linker.downcallHandle(
+        Esys_Create = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Create").orElseThrow(),
                 FunctionDescriptor.of(
                         JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
                         ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
-        esysLoad = linker.downcallHandle(
+        Esys_Load = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Load").orElseThrow(),
                 FunctionDescriptor.of(
                         JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
                         ADDRESS, ADDRESS, ADDRESS));
-        esysFree = linker.downcallHandle(
+        Esys_Sign = linker.downcallHandle(
+                libTss2Esys.lookup("Esys_Sign").orElseThrow(),
+                FunctionDescriptor.of(
+                        JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT,
+                        ADDRESS, ADDRESS, ADDRESS, ADDRESS));
+        Esys_Free = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Free").orElseThrow(),
                 FunctionDescriptor.ofVoid(ADDRESS));
 
         var libTss2Rc = SymbolLookup.libraryLookup("libtss2-rc.so.0", allocator);
-        tss2RcDecode = linker.downcallHandle(
+        Tss2_RC_Decode = linker.downcallHandle(
                 libTss2Rc.lookup("Tss2_RC_Decode").orElseThrow(),
                 FunctionDescriptor.of(ADDRESS, JAVA_INT));
 
@@ -103,18 +112,18 @@ enum LibTss2 { ;
 
     static Ref<MemoryAddress> esysInitialize(MemorySession allocator) {
         var esysCtxPtr = MemorySegment.allocateNative(ADDRESS, allocator);
-        var rc = (int) invoke(esysInitialize, esysCtxPtr, NULL, NULL);
+        var rc = (int) invoke(Esys_Initialize, esysCtxPtr, NULL, NULL);
         if (rc != 0) {
             throw new SecurityException("esysInitialize failed: " + tss2RcDecode(rc));
         }
         return new Ref<>(
                 esysCtxPtr.get(ADDRESS, 0),
-                () -> invoke(esysFinalize, esysCtxPtr));
+                () -> invoke(Esys_Finalize, esysCtxPtr));
     }
 
     static byte[] esysGetRandom(MemorySession allocator, Ref<MemoryAddress> esysCtx, int count) {
         var randomPtr = MemorySegment.allocateNative(ADDRESS, allocator);
-        var rc = (int) invoke(esysGetRandom, esysCtx.target(),
+        var rc = (int) invoke(Esys_GetRandom, esysCtx.target(),
                 ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
                 (short) Math.min(count, 64),
                 randomPtr);
@@ -139,7 +148,7 @@ enum LibTss2 { ;
             for (int k = 0; k < j - i; k++) {
                 TPM2B_SENSITIVE_DATA_buffer.set(stir, k, seed[i + k]);
             }
-            var rc = (int) invoke(esysStirRandom, esysCtx.target(), ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, stir);
+            var rc = (int) invoke(Esys_StirRandom, esysCtx.target(), ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, stir);
             if (rc != 0) {
                 throw new SecurityException("esysStirRandom failed: " + tss2RcDecode(rc));
             }
@@ -164,7 +173,7 @@ enum LibTss2 { ;
 
         var objectHandle = allocator.allocate(JAVA_INT, 0);
         var rc = (int) invoke(
-                esysCreatePrimary, esysCtx.target(), ESYS_TR_RH_OWNER,
+                Esys_CreatePrimary, esysCtx.target(), ESYS_TR_RH_OWNER,
                 ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
                 inSensitive, inPublic, outsideInfo, creationPCR, objectHandle,
                 NULL, NULL, NULL, NULL);
@@ -194,7 +203,7 @@ enum LibTss2 { ;
         var keyPrivatePtr = MemorySegment.allocateNative(ADDRESS, allocator);
         var keyPublicPtr = MemorySegment.allocateNative(ADDRESS, allocator);
         var rc = (int) invoke(
-                esysCreate, esysCtx.target(), primaryCtx,
+                Esys_Create, esysCtx.target(), primaryCtx,
                 ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
                 inSensitive, inPublic, outsideInfo, creationPCR,
                 keyPrivatePtr, keyPublicPtr, NULL, NULL, NULL);
@@ -216,8 +225,10 @@ enum LibTss2 { ;
             var unmarshalledPublic = tss2PublicUnmarshall(allocator, marshalledPublic);
             try (var loaded = esysLoad(
                     allocator, esysCtx, primaryCtx,
-                    unmarshalledPrivate, unmarshalledPublic)) {
+                    privateRef.target(), publicRef.target())) {
                 System.out.println("Loaded handle " + loaded.target());
+                esysSign(allocator, esysCtx, loaded.target(), new byte[32]);
+
                 var privateBuffer2 = readBytes(
                         TPM2B_PRIVATE_size,
                         TPM2B_PRIVATE_buffer,
@@ -230,6 +241,7 @@ enum LibTss2 { ;
                 System.out.println("modulus=" + new BigInteger(1, modulus2));
             }
             */
+
             return new Tss2RsaKey(
                     BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
                     new BigInteger(1, modulus),
@@ -303,7 +315,7 @@ enum LibTss2 { ;
                                  MemoryAddress inPublic) {
         var handlePtr = MemorySegment.allocateNative(ADDRESS, allocator);
         var rc = (int) invoke(
-                esysLoad,
+                Esys_Load,
                 esysCtx.target(), primaryCtx,
                 ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
                 inPrivate,  inPublic, handlePtr);
@@ -314,19 +326,50 @@ enum LibTss2 { ;
         return new Ref<>(handle, () -> esysFlushContext(esysCtx, handle));
     }
 
+    static byte[] esysSign(MemorySession allocator,
+                           Ref<MemoryAddress> esysCtx,
+                           int keyHandle,
+                           byte[] digestBytes) {
+        var scheme = MemorySegment.allocateNative(TPMT_SIG_SCHEME, allocator);
+        TPMT_SIG_SCHEME_scheme.set(scheme, TPM2_ALG_RSASSA);
+        TPMT_SIG_SCHEME_details_rsassa_hashAlg.set(scheme, TPM2_ALG_SHA256);
+
+        var digest = MemorySegment.allocateNative(TPM2B_DIGEST, allocator);
+        writeBytes(digestBytes, digest, TPM2B_DIGEST_size, TPM2B_DIGEST_buffer);
+
+        var validation = MemorySegment.allocateNative(TPMT_TK_HASHCHECK, allocator);
+        TPMT_TK_HASHCHECK_tag.set(validation, TPM2_ST_HASHCHECK);
+        TPMT_TK_HASHCHECK_hierarchy.set(validation, TPM2_RH_NULL);
+        TPMT_TK_HASHCHECK_digest_size.set(validation, (short) 0);
+
+        var signaturePtr = MemorySegment.allocateNative(ADDRESS, allocator);
+        var rc = (int) invoke(Esys_Sign, esysCtx.target(), keyHandle,
+                ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+                digest, scheme, validation, signaturePtr);
+        if (rc != 0) {
+            throw new SecurityException("Esys_Sign failed: " + tss2RcDecode(rc));
+        }
+        try (var signatureRef = asRef(signaturePtr.get(ADDRESS, 0))) {
+            return readBytes(
+                    TPMT_SIGNATURE_signature_rsassa_sig_size,
+                    TPMT_SIGNATURE_signature_rsassa_sig_buffer,
+                    cast(signatureRef.target(), TPMT_SIGNATURE, allocator));
+        }
+    }
+
     static void esysFlushContext(Ref<MemoryAddress> esysCtx, int flushHandle) {
-        var rc = (int) invoke(esysFlushContext, esysCtx.target(), flushHandle);
+        var rc = (int) invoke(Esys_FlushContext, esysCtx.target(), flushHandle);
         if (rc != 0) {
             throw new SecurityException("esysFlushContext failed: " + tss2RcDecode(rc));
         }
     }
 
     static void esysFree(MemoryAddress ptr) {
-        invoke(esysFree, ptr);
+        invoke(Esys_Free, ptr);
     }
 
     static String tss2RcDecode(int rc) {
-        var err = (MemoryAddress) invoke(tss2RcDecode, rc);
+        var err = (MemoryAddress) invoke(Tss2_RC_Decode, rc);
         return err.getUtf8String(0);
     }
 
@@ -344,6 +387,13 @@ enum LibTss2 { ;
             bytes[i] = (byte) bufHandle.get(struct, i);
         }
         return bytes;
+    }
+
+    private static void writeBytes(byte[] bytes, MemorySegment struct, VarHandle sizeHandle, VarHandle bufHandle) {
+        sizeHandle.set(struct, (short) bytes.length);
+        for (var i = 0; i < bytes.length; i++) {
+            bufHandle.set(struct, i, bytes[i]);
+        }
     }
 
     private static Ref<MemoryAddress> asRef(MemoryAddress ptr) {
