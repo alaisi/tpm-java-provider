@@ -3,7 +3,7 @@ package com.github.alaisi.tpm.internal;
 import java.lang.foreign.MemorySession;
 import java.security.SecureRandomSpi;
 
-public class TpmSecureRandom extends SecureRandomSpi {
+public final class TpmSecureRandom extends SecureRandomSpi {
 
     @Override
     protected void engineNextBytes(byte[] bytes) {

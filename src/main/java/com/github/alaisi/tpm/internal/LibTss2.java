@@ -12,7 +12,6 @@ import java.util.HexFormat;
 
 import static com.github.alaisi.tpm.internal.LibTss2Types.*;
 import static java.lang.foreign.MemoryAddress.NULL;
-import static java.lang.foreign.MemorySession.openImplicit;
 import static java.lang.foreign.ValueLayout.*;
 
 enum LibTss2 { ;
@@ -27,6 +26,10 @@ enum LibTss2 { ;
     private static final MethodHandle esysFlushContext;
     private static final MethodHandle esysCreate;
     private static final MethodHandle esysLoad;
+    private static final MethodHandle Tss2_MU_TPM2B_PRIVATE_Marshal;
+    private static final MethodHandle Tss2_MU_TPM2B_PRIVATE_Unmarshal;
+    private static final MethodHandle Tss2_MU_TPM2B_PUBLIC_Marshal;
+    private static final MethodHandle Tss2_MU_TPM2B_PUBLIC_Unmarshal;
 
     private static final int ESYS_TR_NONE = 0xfff;
     private static final int ESYS_TR_RH_OWNER = 0x101;
@@ -41,8 +44,9 @@ enum LibTss2 { ;
 
     static {
         var linker = Linker.nativeLinker();
+        var allocator = MemorySession.openImplicit();
 
-        var libTss2Esys = SymbolLookup.libraryLookup("libtss2-esys.so.0", openImplicit());
+        var libTss2Esys = SymbolLookup.libraryLookup("libtss2-esys.so.0", allocator);
         esysInitialize = linker.downcallHandle(
                 libTss2Esys.lookup("Esys_Initialize").orElseThrow(),
                 FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
@@ -77,10 +81,24 @@ enum LibTss2 { ;
                 libTss2Esys.lookup("Esys_Free").orElseThrow(),
                 FunctionDescriptor.ofVoid(ADDRESS));
 
-        var libTss2Rc = SymbolLookup.libraryLookup("libtss2-rc.so.0", openImplicit());
+        var libTss2Rc = SymbolLookup.libraryLookup("libtss2-rc.so.0", allocator);
         tss2RcDecode = linker.downcallHandle(
                 libTss2Rc.lookup("Tss2_RC_Decode").orElseThrow(),
                 FunctionDescriptor.of(ADDRESS, JAVA_INT));
+
+        var libTss2Mu = SymbolLookup.libraryLookup("libtss2-mu.so.0", allocator);
+        Tss2_MU_TPM2B_PRIVATE_Marshal = linker.downcallHandle(
+                libTss2Mu.lookup("Tss2_MU_TPM2B_PRIVATE_Marshal").orElseThrow(),
+                FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_LONG, ADDRESS));
+        Tss2_MU_TPM2B_PRIVATE_Unmarshal = linker.downcallHandle(
+                libTss2Mu.lookup("Tss2_MU_TPM2B_PRIVATE_Unmarshal").orElseThrow(),
+                FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_LONG, ADDRESS, ADDRESS));
+        Tss2_MU_TPM2B_PUBLIC_Marshal = linker.downcallHandle(
+                libTss2Mu.lookup("Tss2_MU_TPM2B_PUBLIC_Marshal").orElseThrow(),
+                FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_LONG, ADDRESS));
+        Tss2_MU_TPM2B_PUBLIC_Unmarshal = linker.downcallHandle(
+                libTss2Mu.lookup("Tss2_MU_TPM2B_PUBLIC_Unmarshal").orElseThrow(),
+                FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_LONG, ADDRESS, ADDRESS));
     }
 
     static Ref<MemoryAddress> esysInitialize(MemorySession allocator) {
@@ -187,24 +205,95 @@ enum LibTss2 { ;
              var publicRef = asRef(keyPublicPtr.get(ADDRESS, 0))) {
             var keyPublic = cast(publicRef.target(), TPM2B_PUBLIC, allocator);
             var exponent = (int) TPM2B_PUBLIC_parameters_rsaDetail_exponent.get(keyPublic);
-            var modulus = copyBytes(
+            var modulus = readBytes(
                     TPM2B_PUBLIC_parameters_rsaDetail_size,
                     TPM2B_PUBLIC_parameters_rsaDetail_buffer,
                     keyPublic);
-            var privateBuffer = copyBytes(
-                    TPM2B_PRIVATE_size,
-                    TPM2B_PRIVATE_buffer,
-                    cast(privateRef.target(), TPM2B_PRIVATE, allocator));
+            var marshalledPrivate = tss2PrivateMarshall(allocator, privateRef.target());
+            var marshalledPublic = tss2PublicMarshall(allocator, publicRef.target());
+            /*
+            var unmarshalledPrivate = tss2PrivateUnmarshall(allocator, marshalledPrivate);
+            var unmarshalledPublic = tss2PublicUnmarshall(allocator, marshalledPublic);
             try (var loaded = esysLoad(
                     allocator, esysCtx, primaryCtx,
-                    privateRef.target(), publicRef.target())) {
+                    unmarshalledPrivate, unmarshalledPublic)) {
                 System.out.println("Loaded handle " + loaded.target());
+                var privateBuffer2 = readBytes(
+                        TPM2B_PRIVATE_size,
+                        TPM2B_PRIVATE_buffer,
+                        cast(unmarshalledPrivate, TPM2B_PRIVATE, allocator));
+                System.out.println("privateBuffer=" + HexFormat.of().formatHex(privateBuffer2));
+                var modulus2 = readBytes(
+                        TPM2B_PUBLIC_parameters_rsaDetail_size,
+                        TPM2B_PUBLIC_parameters_rsaDetail_buffer,
+                        cast(unmarshalledPublic, TPM2B_PUBLIC, allocator));
+                System.out.println("modulus=" + new BigInteger(1, modulus2));
             }
+            */
             return new Tss2RsaKey(
                     BigInteger.valueOf(exponent == 0 ? 65537 : exponent),
                     new BigInteger(1, modulus),
-                    privateBuffer);
+                    marshalledPrivate,
+                    marshalledPublic);
         }
+    }
+
+    static byte[] tss2PrivateMarshall(MemorySession allocator, MemoryAddress tpm2bPrivate) {
+        var bufLen = 2048L;
+        var buf = allocator.allocateArray(JAVA_BYTE, bufLen);
+        var outLen = allocator.allocate(ADDRESS);
+        var rc = (int) invoke(Tss2_MU_TPM2B_PRIVATE_Marshal, tpm2bPrivate, buf, bufLen, outLen);
+        if (rc != 0) {
+            throw new SecurityException("Tss2_MU_TPM2B_PRIVATE_Marshal failed: " + tss2RcDecode(rc));
+        }
+        var marshalled = new byte[(int) outLen.get(JAVA_LONG, 0)];
+        for (var i = 0; i < marshalled.length; i++) {
+            marshalled[i] = buf.get(JAVA_BYTE, i);
+        }
+        return marshalled;
+    }
+
+    static MemoryAddress tss2PrivateUnmarshall(MemorySession allocator, byte[] marshalled) {
+        var buf = allocator.allocateArray(JAVA_BYTE, marshalled.length);
+        for (var i = 0; i < marshalled.length; i++) {
+            buf.set(JAVA_BYTE, i, marshalled[i]);
+        }
+        var offset = allocator.allocate(ADDRESS);
+        var tpm2bPrivate = MemorySegment.allocateNative(TPM2B_PRIVATE, allocator);
+        var rc = (int) invoke(Tss2_MU_TPM2B_PRIVATE_Unmarshal, buf, (long) marshalled.length, offset, tpm2bPrivate);
+        if (rc != 0) {
+            throw new SecurityException("Tss2_MU_TPM2B_PRIVATE_Unmarshal failed: " + tss2RcDecode(rc));
+        }
+        return tpm2bPrivate.address();
+    }
+
+    static byte[] tss2PublicMarshall(MemorySession allocator, MemoryAddress tpm2bPublic) {
+        var bufLen = 2048L;
+        var buf = allocator.allocateArray(JAVA_BYTE, bufLen);
+        var outLen = allocator.allocate(ADDRESS);
+        var rc = (int) invoke(Tss2_MU_TPM2B_PUBLIC_Marshal, tpm2bPublic, buf, bufLen, outLen);
+        if (rc != 0) {
+            throw new SecurityException("Tss2_MU_TPM2B_PUBLIC_Marshal failed: " + tss2RcDecode(rc));
+        }
+        var marshalled = new byte[(int) outLen.get(JAVA_LONG, 0)];
+        for (var i = 0; i < marshalled.length; i++) {
+            marshalled[i] = buf.get(JAVA_BYTE, i);
+        }
+        return marshalled;
+    }
+
+    static MemoryAddress tss2PublicUnmarshall(MemorySession allocator, byte[] marshalled) {
+        var buf = allocator.allocateArray(JAVA_BYTE, marshalled.length);
+        for (var i = 0; i < marshalled.length; i++) {
+            buf.set(JAVA_BYTE, i, marshalled[i]);
+        }
+        var offset = allocator.allocate(ADDRESS);
+        var tpm2bPrivate = MemorySegment.allocateNative(TPM2B_PUBLIC, allocator);
+        var rc = (int) invoke(Tss2_MU_TPM2B_PUBLIC_Unmarshal, buf, (long) marshalled.length, offset, tpm2bPrivate);
+        if (rc != 0) {
+            throw new SecurityException("Tss2_MU_TPM2B_PUBLIC_Unmarshal failed: " + tss2RcDecode(rc));
+        }
+        return tpm2bPrivate.address();
     }
 
     static Ref<Integer> esysLoad(MemorySession allocator,
@@ -249,7 +338,7 @@ enum LibTss2 { ;
         }
     }
 
-    private static byte[] copyBytes(VarHandle sizeHandle, VarHandle bufHandle, MemorySegment struct) {
+    private static byte[] readBytes(VarHandle sizeHandle, VarHandle bufHandle, MemorySegment struct) {
         var bytes = new byte[(int) sizeHandle.get(struct)];
         for (var i = 0; i < bytes.length; i++) {
             bytes[i] = (byte) bufHandle.get(struct, i);
@@ -271,7 +360,11 @@ enum LibTss2 { ;
             destructor.run();
         }
     }
-    record Tss2RsaKey(BigInteger publicExponent, BigInteger modulus, byte[] privateBuffer) {}
+
+    record Tss2RsaKey(BigInteger publicExponent,
+                      BigInteger modulus,
+                      byte[] marshalledPrivate,
+                      byte[] marshalledPublic) {}
 
     public static void main(String[] args) throws Exception {
         var l = new ArrayList<String>();
